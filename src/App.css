@@ -329,6 +329,44 @@ body {
   border-radius: 3px;
 }
 
+/* Hide main content on mobile by default */
+@media (max-width: 768px) {
+  .main-content {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    display: none; /* Hidden by default on mobile */
+    z-index: 1000;
+    border-radius: 0;
+  }
+
+  /* Show main content when a prompt is selected */
+  .app-container.has-selection .main-content {
+    display: flex;
+  }
+
+  /* Hide sidebar when viewing on mobile */
+  .app-container.has-selection .sidebar {
+    display: none;
+  }
+
+  /* Add back button when in selection mode */
+  .app-container.has-selection .main-content::before {
+    content: '';
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    z-index: 10001;
+  }
+}
+
 /* ERROR BOX */
 .error-box {
   background: rgba(239, 68, 68, 0.1);
@@ -608,5 +646,89 @@ body {
   .btn {
     flex: 0 1 auto;
     min-width: auto;
+  }
+}
+
+.form-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.back-btn {
+  background: transparent;
+  border: none;
+  color: #0ea5e9;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: #2a2a2a;
+  color: #0284c7;
+}
+
+@media (min-width: 769px) {
+  .back-btn {
+    display: none;
+  }
+}
+
+.form-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.back-btn {
+  background: transparent;
+  border: none;
+  color: #0ea5e9;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: none;
+}
+
+.back-btn:hover {
+  background: #2a2a2a;
+  color: #0284c7;
+}
+
+/* Show back button on mobile only */
+@media (max-width: 768px) {
+  .back-btn {
+    display: block;
+  }
+
+  .main-content {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    z-index: 1000;
+  }
+
+  .app-container.has-selection .main-content {
+    display: flex;
+  }
+
+  .app-container.has-selection .sidebar {
+    display: none;
+  }
+
+  .form-header h2 {
+    flex: 1;
   }
 }

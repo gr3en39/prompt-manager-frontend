@@ -259,7 +259,7 @@ export default function App() {
   // RENDER MAIN APP
   // ============================================
   return (
-    <div className="app-container">
+    <div className={`app-container ${selectedPromptId ? 'has-selection' : ''}`}>
       {/* SIDEBAR (Desktop) / TOP (Mobile) */}
       <div className="sidebar">
         <div className="sidebar-header">
@@ -344,7 +344,10 @@ export default function App() {
         {selectedPromptId && selectedPrompt ? (
           // VIEW/EDIT MODE
           <div className="form-container">
-            <h2>{editingId ? 'Edit Prompt' : 'View Prompt'}</h2>
+            <div className="form-header">
+              <button onClick={() => resetForm()} className="back-btn">← Back</button>
+              <h2>{editingId ? 'Edit Prompt' : 'View Prompt'}</h2>
+            </div>
 
             <input
               type="text"
