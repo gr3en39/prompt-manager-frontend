@@ -11,6 +11,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
   const [selectedPromptId, setSelectedPromptId] = useState(null);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [newPrompt, setNewPrompt] = useState({ title: '', content: '', tags: '' });
   const [loading, setLoading] = useState(false);
@@ -191,16 +192,25 @@ export default function App() {
     setNewPrompt({ title: '', content: '', tags: '' });
     setEditingId(null);
     setSelectedPromptId(null);
+    setIsCreatingNew(false);
   };
 
   const startEdit = (prompt) => {
     setSelectedPromptId(prompt.id);
+    setIsCreatingNew(false);
     setEditingId(prompt.id);
     setNewPrompt({
       title: prompt.title,
       content: prompt.content,
       tags: prompt.tags.join(', ')
     });
+  };
+
+  const startCreateNew = () => {
+    setSelectedPromptId(null);
+    setIsCreatingNew(true);
+    setEditingId(null);
+    setNewPrompt({ title: '', content: '', tags: '' });
   };
 
   const allTags = [...new Set(prompts.flatMap(p => p.tags))];
@@ -213,6 +223,7 @@ export default function App() {
   });
 
   const selectedPrompt = prompts.find(p => p.id === selectedPromptId);
+  const showMainPanel = selectedPromptId || isCreatingNew;
 
   if (!isAuthenticated) {
     return (
@@ -243,13 +254,13 @@ export default function App() {
   }
 
   return (
-    <div className={`app-container ${selectedPromptId ? 'has-selection' : ''}`}>
+    <div className={`app-container ${showMainPanel ? 'has-selection' : ''}`}>
       <div className="sidebar">
         <div className="sidebar-header">
           <h1>Prompts</h1>
           <div className="sidebar-actions">
             <button
-              onClick={() => resetForm()}
+              onClick={() => startCreateNew()}
               className="icon-btn new-btn"
               title="New prompt"
             >
@@ -398,6 +409,49 @@ export default function App() {
                 </>
               )}
             </div>
+          </div>
+        ) : isCreatingNew ? (
+          <div className="form-container">
+            <div className="form-header">
+              <button 
+                onClick={() => resetForm()} 
+                className="back-btn"
+              >
+                ← Back
+              </button>
+              <h2>Create New Prompt</h2>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Title"
+              value={newPrompt.title}
+              onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
+              className="form-input"
+            />
+
+            <textarea
+              placeholder="Content"
+              value={newPrompt.content}
+              onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
+              className="form-textarea"
+            />
+
+            <input
+              type="text"
+              placeholder="Tags (comma-separated)"
+              value={newPrompt.tags}
+              onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
+              className="form-input"
+            />
+
+            <button
+              onClick={savePrompt}
+              disabled={loading}
+              className="btn btn-primary"
+            >
+              {loading ? 'Creating...' : 'Create Prompt'}
+            </button>
           </div>
         ) : (
           <div className="form-container">
