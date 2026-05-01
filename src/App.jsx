@@ -17,10 +17,20 @@ export default function App() {
   const [selectedPrompt, setSelectedPrompt] = useState(null);
   const [swipeOpen, setSwipeOpen] = useState(null);
   const swipeRef = useRef({});
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
   const SESSION_KEY = 'promptManagerAuth';
   const SESSION_EXPIRY_DAYS = 2;
+
+  // Detect mobile
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Check if user is already authenticated
   useEffect(() => {
@@ -55,7 +65,6 @@ export default function App() {
       const data = await response.json();
 
       if (data.success) {
-        // Store auth with expiry
         localStorage.setItem(SESSION_KEY, JSON.stringify({
           password,
           timestamp: Date.now()
@@ -225,7 +234,7 @@ export default function App() {
   };
 
   const handleSwipeStart = (id, e) => {
-    swipeRef.current[id] = { startX: e.touches[0].clientX };
+    swipeRef.current[id] = { startX: e.touches[0].clientX, startTime: Date.now() };
   };
 
   const handleSwipeEnd = (id, e) => {
@@ -234,12 +243,18 @@ export default function App() {
     const endX = e.changedTouches[0].clientX;
     const startX = swipeRef.current[id].startX;
     const diff = startX - endX;
+    const timeDiff = Date.now() - swipeRef.current[id].startTime;
 
-    if (diff > 50) {
-      setSwipeOpen(id);
-      setSelectedPrompt(id);
-    } else if (diff < -50) {
-      setSwipeOpen(null);
+    // Only register swipe if it's fast (less than 500ms) and far (more than 50px)
+    if (timeDiff < 500 && Math.abs(diff) > 50) {
+      if (diff > 0) {
+        // Swiped left - open
+        setSwipeOpen(id);
+        setSelectedPrompt(id);
+      } else {
+        // Swiped right - close
+        setSwipeOpen(null);
+      }
     }
 
     swipeRef.current[id] = null;
@@ -292,25 +307,25 @@ export default function App() {
         {/* LEFT SIDEBAR */}
         <div className="sidebar">
           <div className="sidebar-header">
-  <h1>Prompts</h1>
-  <div className="sidebar-header-actions">
-    <button 
-      onClick={() => {
-        setSelectedPrompt(null);
-        setSwipeOpen(null);
-        setNewPrompt({ title: '', content: '', tags: '' });
-        setEditingId(null);
-      }}
-      className="new-btn"
-      title="New prompt"
-    >
-      ⊕
-    </button>
-    <button onClick={handleLogout} className="logout-btn" title="Logout">
-      ⏻
-    </button>
-  </div>
-</div>
+            <h1>Prompts</h1>
+            <div className="sidebar-header-actions">
+              <button 
+                onClick={() => {
+                  setSelectedPrompt(null);
+                  setSwipeOpen(null);
+                  setNewPrompt({ title: '', content: '', tags: '' });
+                  setEditingId(null);
+                }}
+                className="new-btn"
+                title="New prompt"
+              >
+                ⊕
+              </button>
+              <button onClick={handleLogout} className="logout-btn" title="Logout">
+                ⏻
+              </button>
+            </div>
+          </div>
 
           <input
             type="text"
@@ -346,12 +361,14 @@ export default function App() {
             {filtered.map(prompt => (
               <div
                 key={prompt.id}
-                className={`prompt-item ${selectedPrompt === prompt.id ? 'active' : ''}`}
+                className={`prompt-item ${selectedPrompt === prompt.id ? 'active' : ''} ${swipeOpen === prompt.id ? 'swiped' : ''}`}
                 onTouchStart={(e) => handleSwipeStart(prompt.id, e)}
                 onTouchEnd={(e) => handleSwipeEnd(prompt.id, e)}
                 onClick={() => {
-                  setSelectedPrompt(prompt.id);
-                  setSwipeOpen(null);
+                  if (!isMobile) {
+                    setSelectedPrompt(prompt.id);
+                    setSwipeOpen(null);
+                  }
                 }}
               >
                 <div className="prompt-item-content">
@@ -364,6 +381,9 @@ export default function App() {
                       ))}
                     </div>
                   )}
+                  {isMobile && swipeOpen !== prompt.id && (
+                    <div className="swipe-hint">← Swipe left to view</div>
+                  )}
                 </div>
                 {swipeOpen === prompt.id && (
                   <div className="prompt-item-swipe">
@@ -375,19 +395,122 @@ export default function App() {
           </div>
         </div>
 
-        {/* RIGHT PANEL */}
-        <div className="main-panel">
-          {error && <div className="error-banner">{error}</div>}
+        {/* RIGHT PANEL - DESKTOP ONLY */}
+        {!isMobile && (
+          <div className="main-panel">
+            {error && <div className="error-banner">{error}</div>}
 
-          {selectedPrompt || editingId ? (
+            {selectedPrompt || editingId ? (
+              <div className="editor">
+                <div className="editor-header">
+                  <h2>{editingId ? 'Edit Prompt' : 'View Prompt'}</h2>
+                  {selectedPrompt && !editingId && (
+                    <button onClick={() => startEdit(prompts.find(p => p.id === selectedPrompt))} className="btn-edit-header">
+                      Edit
+                    </button>
+                  )}
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="Title"
+                  value={newPrompt.title}
+                  onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
+                  className="editor-input title-input"
+                />
+
+                <textarea
+                  placeholder="Content"
+                  value={newPrompt.content}
+                  onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
+                  className="editor-textarea"
+                  rows="10"
+                />
+
+                <input
+                  type="text"
+                  placeholder="Tags (comma-separated)"
+                  value={newPrompt.tags}
+                  onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
+                  className="editor-input tags-input"
+                />
+
+                {editingId && (
+                  <div className="editor-actions">
+                    <button onClick={savePrompt} disabled={loading} className="btn-save">
+                      {loading ? 'Saving...' : 'Save'}
+                    </button>
+                    <button onClick={cancelEdit} className="btn-cancel">
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                {selectedPrompt && !editingId && (
+                  <div className="viewer-actions">
+                    <button onClick={() => copyToClipboard(prompts.find(p => p.id === selectedPrompt).content)} className="btn-copy">
+                      Copy
+                    </button>
+                    <button onClick={() => deletePrompt(selectedPrompt)} className="btn-delete">
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="new-prompt-form">
+                <h2>Create New Prompt</h2>
+                <input
+                  type="text"
+                  placeholder="Title"
+                  value={newPrompt.title}
+                  onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
+                  className="editor-input title-input"
+                />
+
+                <textarea
+                  placeholder="Content"
+                  value={newPrompt.content}
+                  onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
+                  className="editor-textarea"
+                  rows="10"
+                />
+
+                <input
+                  type="text"
+                  placeholder="Tags (comma-separated)"
+                  value={newPrompt.tags}
+                  onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
+                  className="editor-input tags-input"
+                />
+
+                <button onClick={savePrompt} disabled={loading} className="btn-save">
+                  {loading ? 'Saving...' : 'Create Prompt'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* MOBILE BOTTOM PANEL */}
+        {isMobile && (selectedPrompt || editingId) && (
+          <div className="mobile-panel">
+            {error && <div className="error-banner">{error}</div>}
+
             <div className="editor">
               <div className="editor-header">
-                <h2>{editingId ? 'Edit Prompt' : 'View Prompt'}</h2>
-                {selectedPrompt && !editingId && (
-                  <button onClick={() => startEdit(prompts.find(p => p.id === selectedPrompt))} className="btn-edit-header">
-                    Edit
-                  </button>
-                )}
+                <h2>{editingId ? 'Edit' : 'View'}</h2>
+                <button 
+                  onClick={() => {
+                    setSelectedPrompt(null);
+                    setSwipeOpen(null);
+                    setEditingId(null);
+                    setNewPrompt({ title: '', content: '', tags: '' });
+                  }}
+                  className="close-btn"
+                >
+                  ✕
+                </button>
               </div>
 
               <input
@@ -403,12 +526,11 @@ export default function App() {
                 value={newPrompt.content}
                 onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
                 className="editor-textarea"
-                rows="10"
               />
 
               <input
                 type="text"
-                placeholder="Tags (comma-separated)"
+                placeholder="Tags"
                 value={newPrompt.tags}
                 onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
                 className="editor-input tags-input"
@@ -417,7 +539,7 @@ export default function App() {
               {editingId && (
                 <div className="editor-actions">
                   <button onClick={savePrompt} disabled={loading} className="btn-save">
-                    {loading ? 'Saving...' : 'Save'}
+                    Save
                   </button>
                   <button onClick={cancelEdit} className="btn-cancel">
                     Cancel
@@ -427,6 +549,16 @@ export default function App() {
 
               {selectedPrompt && !editingId && (
                 <div className="viewer-actions">
+                  <button onClick={() => {
+                    setEditingId(selectedPrompt);
+                    setNewPrompt({
+                      title: prompts.find(p => p.id === selectedPrompt)?.title || '',
+                      content: prompts.find(p => p.id === selectedPrompt)?.content || '',
+                      tags: prompts.find(p => p.id === selectedPrompt)?.tags.join(', ') || ''
+                    });
+                  }} className="btn-copy">
+                    Edit
+                  </button>
                   <button onClick={() => copyToClipboard(prompts.find(p => p.id === selectedPrompt).content)} className="btn-copy">
                     Copy
                   </button>
@@ -436,54 +568,25 @@ export default function App() {
                 </div>
               )}
             </div>
-          ) : (
-            <div className="new-prompt-form">
-              <h2>Create New Prompt</h2>
-              <input
-                type="text"
-                placeholder="Title"
-                value={newPrompt.title}
-                onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
-                className="editor-input title-input"
-              />
-
-              <textarea
-                placeholder="Content"
-                value={newPrompt.content}
-                onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
-                className="editor-textarea"
-                rows="10"
-              />
-
-              <input
-                type="text"
-                placeholder="Tags (comma-separated)"
-                value={newPrompt.tags}
-                onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
-                className="editor-input tags-input"
-              />
-
-              <button onClick={savePrompt} disabled={loading} className="btn-save">
-                {loading ? 'Saving...' : 'Create Prompt'}
-              </button>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* FLOATING BUTTON */}
-      <button
-        className="floating-btn"
-        onClick={() => {
-          setSelectedPrompt(null);
-          setSwipeOpen(null);
-          setNewPrompt({ title: '', content: '', tags: '' });
-          setEditingId(null);
-        }}
-        title="New prompt"
-      >
-        +
-      </button>
+      {/* FLOATING BUTTON - MOBILE ONLY */}
+      {isMobile && (
+        <button
+          className="floating-btn"
+          onClick={() => {
+            setSelectedPrompt(null);
+            setSwipeOpen(null);
+            setNewPrompt({ title: '', content: '', tags: '' });
+            setEditingId(null);
+          }}
+          title="New prompt"
+        >
+          +
+        </button>
+      )}
     </div>
   );
 }
