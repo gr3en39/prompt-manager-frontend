@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
   const [prompts, setPrompts] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
@@ -14,15 +19,83 @@ export default function App() {
   const swipeRef = useRef({});
 
   const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
+  const SESSION_KEY = 'promptManagerAuth';
+  const SESSION_EXPIRY_DAYS = 2;
 
+  // Check if user is already authenticated
   useEffect(() => {
-    fetchPrompts();
+    const storedAuth = localStorage.getItem(SESSION_KEY);
+    if (storedAuth) {
+      const { password: savedPassword, timestamp } = JSON.parse(storedAuth);
+      const expiryTime = timestamp + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+
+      if (Date.now() < expiryTime) {
+        setIsAuthenticated(true);
+        setPassword(savedPassword);
+        fetchPrompts(savedPassword);
+        return;
+      } else {
+        localStorage.removeItem(SESSION_KEY);
+      }
+    }
   }, []);
 
-  const fetchPrompts = async () => {
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError('');
+
+    try {
+      const response = await fetch(`${API_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Store auth with expiry
+        localStorage.setItem(SESSION_KEY, JSON.stringify({
+          password,
+          timestamp: Date.now()
+        }));
+
+        setIsAuthenticated(true);
+        fetchPrompts(password);
+      } else {
+        setLoginError('Invalid password');
+      }
+    } catch (err) {
+      setLoginError('Failed to connect to server');
+      console.error(err);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(SESSION_KEY);
+    setIsAuthenticated(false);
+    setPassword('');
+    setPrompts([]);
+    setNewPrompt({ title: '', content: '', tags: '' });
+    setSelectedPrompt(null);
+    setEditingId(null);
+  };
+
+  const fetchPrompts = async (pwd = password) => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/prompts`);
+      const response = await fetch(`${API_URL}/api/prompts`, {
+        headers: { 'Authorization': `Bearer ${pwd}` }
+      });
+
+      if (response.status === 401) {
+        handleLogout();
+        return;
+      }
+
       const data = await response.json();
       setPrompts(data.prompts);
       setError('');
@@ -33,6 +106,12 @@ export default function App() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchPrompts();
+    }
+  }, []);
 
   const savePrompt = async () => {
     if (!newPrompt.title.trim() || !newPrompt.content.trim()) {
@@ -65,9 +144,17 @@ export default function App() {
 
       const response = await fetch(`${API_URL}/api/prompts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${password}`
+        },
         body: JSON.stringify({ prompts: updatedPrompts })
       });
+
+      if (response.status === 401) {
+        handleLogout();
+        return;
+      }
 
       if (response.ok) {
         setPrompts(updatedPrompts);
@@ -92,9 +179,17 @@ export default function App() {
       const updatedPrompts = prompts.filter(p => p.id !== id);
       const response = await fetch(`${API_URL}/api/prompts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${password}`
+        },
         body: JSON.stringify({ prompts: updatedPrompts })
       });
+
+      if (response.status === 401) {
+        handleLogout();
+        return;
+      }
 
       if (response.ok) {
         setPrompts(updatedPrompts);
@@ -141,17 +236,47 @@ export default function App() {
     const diff = startX - endX;
 
     if (diff > 50) {
-      // Swiped left - open
       setSwipeOpen(id);
       setSelectedPrompt(id);
     } else if (diff < -50) {
-      // Swiped right - close
       setSwipeOpen(null);
     }
 
     swipeRef.current[id] = null;
   };
 
+  // LOGIN SCREEN
+  if (!isAuthenticated) {
+    return (
+      <div className="login-container">
+        <div className="login-box">
+          <h1>🤖 Prompt Manager</h1>
+          <p>Enter your password to continue</p>
+
+          <form onSubmit={handleLogin}>
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="login-input"
+              autoFocus
+            />
+
+            {loginError && <div className="login-error">{loginError}</div>}
+
+            <button type="submit" disabled={loginLoading} className="login-btn">
+              {loginLoading ? 'Logging in...' : 'Login'}
+            </button>
+          </form>
+
+          <p className="session-info">Session expires in 2 days</p>
+        </div>
+      </div>
+    );
+  }
+
+  // MAIN APP
   const allTags = [...new Set(prompts.flatMap(p => p.tags))];
   const filtered = prompts.filter(p => {
     const matchesSearch =
@@ -168,7 +293,9 @@ export default function App() {
         <div className="sidebar">
           <div className="sidebar-header">
             <h1>Prompts</h1>
-            <span className="count">{filtered.length}</span>
+            <button onClick={handleLogout} className="logout-btn" title="Logout">
+              ⏻
+            </button>
           </div>
 
           <input
@@ -234,7 +361,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* RIGHT PANEL - DESKTOP ONLY */}
+        {/* RIGHT PANEL */}
         <div className="main-panel">
           {error && <div className="error-banner">{error}</div>}
 
@@ -330,8 +457,19 @@ export default function App() {
         </div>
       </div>
 
-      {/* MOBILE FLOATING BUTTON */}
-      <button className="floating-btn" onClick={() => { setSelectedPrompt(null); setSwipeOpen(null); setNewPrompt({ title: '', content: '', tags: '' }); setEditingId(null); }} title="New prompt">+</button>
+      {/* FLOATING BUTTON */}
+      <button
+        className="floating-btn"
+        onClick={() => {
+          setSelectedPrompt(null);
+          setSwipeOpen(null);
+          setNewPrompt({ title: '', content: '', tags: '' });
+          setEditingId(null);
+        }}
+        title="New prompt"
+      >
+        +
+      </button>
     </div>
   );
 }
