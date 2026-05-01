@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 
 export default function App() {
-  // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // App state
   const [prompts, setPrompts] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
@@ -22,7 +20,6 @@ export default function App() {
   const SESSION_KEY = 'promptManagerAuth';
   const SESSION_EXPIRY_DAYS = 2;
 
-  // Check auth on mount
   useEffect(() => {
     const storedAuth = localStorage.getItem(SESSION_KEY);
     if (storedAuth) {
@@ -40,7 +37,6 @@ export default function App() {
     }
   }, []);
 
-  // AUTHENTICATION
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginLoading(true);
@@ -81,7 +77,6 @@ export default function App() {
     resetForm();
   };
 
-  // PROMPTS API
   const fetchPrompts = async (pwd = password) => {
     try {
       setLoading(true);
@@ -208,11 +203,6 @@ export default function App() {
     });
   };
 
-  const cancelEdit = () => {
-    resetForm();
-  };
-
-  // FILTERING
   const allTags = [...new Set(prompts.flatMap(p => p.tags))];
   const filtered = prompts.filter(p => {
     const matchesSearch =
@@ -224,9 +214,6 @@ export default function App() {
 
   const selectedPrompt = prompts.find(p => p.id === selectedPromptId);
 
-  // ============================================
-  // RENDER LOGIN
-  // ============================================
   if (!isAuthenticated) {
     return (
       <div className="login-container">
@@ -255,12 +242,8 @@ export default function App() {
     );
   }
 
-  // ============================================
-  // RENDER MAIN APP
-  // ============================================
   return (
     <div className={`app-container ${selectedPromptId ? 'has-selection' : ''}`}>
-      {/* SIDEBAR (Desktop) / TOP (Mobile) */}
       <div className="sidebar">
         <div className="sidebar-header">
           <h1>Prompts</h1>
@@ -337,15 +320,18 @@ export default function App() {
         </div>
       </div>
 
-      {/* MAIN CONTENT */}
       <div className="main-content">
         {error && <div className="error-box">{error}</div>}
 
         {selectedPromptId && selectedPrompt ? (
-          // VIEW/EDIT MODE
           <div className="form-container">
             <div className="form-header">
-              <button onClick={() => resetForm()} className="back-btn">← Back</button>
+              <button 
+                onClick={() => resetForm()} 
+                className="back-btn"
+              >
+                ← Back
+              </button>
               <h2>{editingId ? 'Edit Prompt' : 'View Prompt'}</h2>
             </div>
 
@@ -385,7 +371,7 @@ export default function App() {
                   >
                     {loading ? 'Saving...' : 'Save'}
                   </button>
-                  <button onClick={cancelEdit} className="btn btn-secondary">
+                  <button onClick={() => resetForm()} className="btn btn-secondary">
                     Cancel
                   </button>
                 </>
@@ -414,7 +400,6 @@ export default function App() {
             </div>
           </div>
         ) : (
-          // CREATE MODE
           <div className="form-container">
             <h2>Create New Prompt</h2>
 
