@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 export default function App() {
@@ -10,6 +10,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedPrompt, setSelectedPrompt] = useState(null);
+  const [swipeOpen, setSwipeOpen] = useState(null);
+  const swipeRef = useRef({});
 
   const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 
@@ -97,6 +99,7 @@ export default function App() {
       if (response.ok) {
         setPrompts(updatedPrompts);
         setSelectedPrompt(null);
+        setSwipeOpen(null);
       }
     } catch (err) {
       setError('Failed to delete prompt');
@@ -118,11 +121,35 @@ export default function App() {
       tags: prompt.tags.join(', ')
     });
     setSelectedPrompt(prompt.id);
+    setSwipeOpen(null);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setNewPrompt({ title: '', content: '', tags: '' });
+  };
+
+  const handleSwipeStart = (id, e) => {
+    swipeRef.current[id] = { startX: e.touches[0].clientX };
+  };
+
+  const handleSwipeEnd = (id, e) => {
+    if (!swipeRef.current[id]) return;
+
+    const endX = e.changedTouches[0].clientX;
+    const startX = swipeRef.current[id].startX;
+    const diff = startX - endX;
+
+    if (diff > 50) {
+      // Swiped left - open
+      setSwipeOpen(id);
+      setSelectedPrompt(id);
+    } else if (diff < -50) {
+      // Swiped right - close
+      setSwipeOpen(null);
+    }
+
+    swipeRef.current[id] = null;
   };
 
   const allTags = [...new Set(prompts.flatMap(p => p.tags))];
@@ -179,15 +206,27 @@ export default function App() {
               <div
                 key={prompt.id}
                 className={`prompt-item ${selectedPrompt === prompt.id ? 'active' : ''}`}
-                onClick={() => setSelectedPrompt(prompt.id)}
+                onTouchStart={(e) => handleSwipeStart(prompt.id, e)}
+                onTouchEnd={(e) => handleSwipeEnd(prompt.id, e)}
+                onClick={() => {
+                  setSelectedPrompt(prompt.id);
+                  setSwipeOpen(null);
+                }}
               >
-                <div className="prompt-item-title">{prompt.title}</div>
-                <div className="prompt-item-preview">{prompt.content.substring(0, 50)}...</div>
-                {prompt.tags.length > 0 && (
-                  <div className="prompt-item-tags">
-                    {prompt.tags.map(tag => (
-                      <span key={tag} className="small-tag">{tag}</span>
-                    ))}
+                <div className="prompt-item-content">
+                  <div className="prompt-item-title">{prompt.title}</div>
+                  <div className="prompt-item-preview">{prompt.content.substring(0, 50)}...</div>
+                  {prompt.tags.length > 0 && (
+                    <div className="prompt-item-tags">
+                      {prompt.tags.map(tag => (
+                        <span key={tag} className="small-tag">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {swipeOpen === prompt.id && (
+                  <div className="prompt-item-swipe">
+                    <button onClick={(e) => { e.stopPropagation(); startEdit(prompt); }} className="swipe-btn edit-btn">View</button>
                   </div>
                 )}
               </div>
@@ -195,7 +234,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* RIGHT PANEL */}
+        {/* RIGHT PANEL - DESKTOP ONLY */}
         <div className="main-panel">
           {error && <div className="error-banner">{error}</div>}
 
@@ -290,6 +329,9 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* MOBILE FLOATING BUTTON */}
+      <button className="floating-btn" onClick={() => { setSelectedPrompt(null); setSwipeOpen(null); setNewPrompt({ title: '', content: '', tags: '' }); setEditingId(null); }} title="New prompt">+</button>
     </div>
   );
 }
