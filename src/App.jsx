@@ -9,9 +9,10 @@ export default function App() {
   const [newPrompt, setNewPrompt] = useState({ title: '', content: '', tags: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedPrompt, setSelectedPrompt] = useState(null);
+
   const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 
-  // Fetch prompts on load
   useEffect(() => {
     fetchPrompts();
   }, []);
@@ -71,6 +72,7 @@ export default function App() {
         setNewPrompt({ title: '', content: '', tags: '' });
         setEditingId(null);
         setError('');
+        setSelectedPrompt(null);
       }
     } catch (err) {
       setError('Failed to save prompt');
@@ -94,6 +96,7 @@ export default function App() {
 
       if (response.ok) {
         setPrompts(updatedPrompts);
+        setSelectedPrompt(null);
       }
     } catch (err) {
       setError('Failed to delete prompt');
@@ -114,6 +117,7 @@ export default function App() {
       content: prompt.content,
       tags: prompt.tags.join(', ')
     });
+    setSelectedPrompt(prompt.id);
   };
 
   const cancelEdit = () => {
@@ -121,7 +125,6 @@ export default function App() {
     setNewPrompt({ title: '', content: '', tags: '' });
   };
 
-  // Filter logic
   const allTags = [...new Set(prompts.flatMap(p => p.tags))];
   const filtered = prompts.filter(p => {
     const matchesSearch =
@@ -133,66 +136,29 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="header">
-        <h1>🤖 AI Prompt Manager</h1>
-        <p>Store, search, and manage your AI prompts with version control</p>
-      </header>
-
-      {error && <div className="error">{error}</div>}
-
       <div className="container">
-        {/* Form Section */}
-        <div className="form-section">
-          <h2>{editingId ? 'Edit Prompt' : 'Add New Prompt'}</h2>
-          <input
-            type="text"
-            placeholder="Prompt Title"
-            value={newPrompt.title}
-            onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
-            className="input"
-          />
-          <textarea
-            placeholder="Prompt Content"
-            value={newPrompt.content}
-            onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
-            className="textarea"
-            rows="6"
-          />
-          <input
-            type="text"
-            placeholder="Tags (comma-separated)"
-            value={newPrompt.tags}
-            onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
-            className="input"
-          />
-          <div className="button-group">
-            <button onClick={savePrompt} disabled={loading} className="btn-primary">
-              {loading ? 'Saving...' : editingId ? 'Update Prompt' : 'Add Prompt'}
-            </button>
-            {editingId && (
-              <button onClick={cancelEdit} className="btn-secondary">
-                Cancel
-              </button>
-            )}
+        {/* LEFT SIDEBAR */}
+        <div className="sidebar">
+          <div className="sidebar-header">
+            <h1>Prompts</h1>
+            <span className="count">{filtered.length}</span>
           </div>
-        </div>
 
-        {/* Search & Filter Section */}
-        <div className="search-section">
           <input
             type="text"
-            placeholder="🔍 Search prompts..."
+            placeholder="Search..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="input search-input"
+            className="search-input"
           />
+
           {allTags.length > 0 && (
             <div className="tags-filter">
               <button
                 className={!selectedTag ? 'tag-btn active' : 'tag-btn'}
                 onClick={() => setSelectedTag('')}
               >
-                All Tags
+                All
               </button>
               {allTags.map(tag => (
                 <button
@@ -205,41 +171,123 @@ export default function App() {
               ))}
             </div>
           )}
+
+          <div className="prompts-list">
+            {loading && <p className="loading">Loading...</p>}
+            {!loading && filtered.length === 0 && <p className="empty">No prompts</p>}
+            {filtered.map(prompt => (
+              <div
+                key={prompt.id}
+                className={`prompt-item ${selectedPrompt === prompt.id ? 'active' : ''}`}
+                onClick={() => setSelectedPrompt(prompt.id)}
+              >
+                <div className="prompt-item-title">{prompt.title}</div>
+                <div className="prompt-item-preview">{prompt.content.substring(0, 50)}...</div>
+                {prompt.tags.length > 0 && (
+                  <div className="prompt-item-tags">
+                    {prompt.tags.map(tag => (
+                      <span key={tag} className="small-tag">{tag}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Prompts List */}
-        <div className="prompts-section">
-          <h2>{filtered.length} Prompt(s)</h2>
-          {loading && <p>Loading...</p>}
-          {!loading && filtered.length === 0 && <p>No prompts found.</p>}
-          {filtered.map(prompt => (
-            <div key={prompt.id} className="prompt-card">
-              <div className="prompt-header">
-                <h3>{prompt.title}</h3>
-                <div className="prompt-actions">
-                  <button onClick={() => copyToClipboard(prompt.content)} className="btn-copy">
-                    📋 Copy
+        {/* RIGHT PANEL */}
+        <div className="main-panel">
+          {error && <div className="error-banner">{error}</div>}
+
+          {selectedPrompt || editingId ? (
+            <div className="editor">
+              <div className="editor-header">
+                <h2>{editingId ? 'Edit Prompt' : 'View Prompt'}</h2>
+                {selectedPrompt && !editingId && (
+                  <button onClick={() => startEdit(prompts.find(p => p.id === selectedPrompt))} className="btn-edit-header">
+                    Edit
                   </button>
-                  <button onClick={() => startEdit(prompt)} className="btn-edit">
-                    ✏️ Edit
+                )}
+              </div>
+
+              <input
+                type="text"
+                placeholder="Title"
+                value={newPrompt.title}
+                onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
+                className="editor-input title-input"
+              />
+
+              <textarea
+                placeholder="Content"
+                value={newPrompt.content}
+                onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
+                className="editor-textarea"
+                rows="10"
+              />
+
+              <input
+                type="text"
+                placeholder="Tags (comma-separated)"
+                value={newPrompt.tags}
+                onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
+                className="editor-input tags-input"
+              />
+
+              {editingId && (
+                <div className="editor-actions">
+                  <button onClick={savePrompt} disabled={loading} className="btn-save">
+                    {loading ? 'Saving...' : 'Save'}
                   </button>
-                  <button onClick={() => deletePrompt(prompt.id)} className="btn-delete">
-                    🗑️ Delete
+                  <button onClick={cancelEdit} className="btn-cancel">
+                    Cancel
                   </button>
                 </div>
-              </div>
-              <p className="prompt-content">{prompt.content}</p>
-              {prompt.tags.length > 0 && (
-                <div className="prompt-tags">
-                  {prompt.tags.map(tag => (
-                    <span key={tag} className="tag">
-                      {tag}
-                    </span>
-                  ))}
+              )}
+
+              {selectedPrompt && !editingId && (
+                <div className="viewer-actions">
+                  <button onClick={() => copyToClipboard(prompts.find(p => p.id === selectedPrompt).content)} className="btn-copy">
+                    Copy
+                  </button>
+                  <button onClick={() => deletePrompt(selectedPrompt)} className="btn-delete">
+                    Delete
+                  </button>
                 </div>
               )}
             </div>
-          ))}
+          ) : (
+            <div className="new-prompt-form">
+              <h2>Create New Prompt</h2>
+              <input
+                type="text"
+                placeholder="Title"
+                value={newPrompt.title}
+                onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
+                className="editor-input title-input"
+              />
+
+              <textarea
+                placeholder="Content"
+                value={newPrompt.content}
+                onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
+                className="editor-textarea"
+                rows="10"
+              />
+
+              <input
+                type="text"
+                placeholder="Tags (comma-separated)"
+                value={newPrompt.tags}
+                onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
+                className="editor-input tags-input"
+              />
+
+              <button onClick={savePrompt} disabled={loading} className="btn-save">
+                {loading ? 'Saving...' : 'Create Prompt'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
