@@ -387,6 +387,7 @@ body {
   background: #0e0e0e;
   padding: 24px;
   overflow-y: auto;
+  min-height: 0; /* Critical for flex containers */
 }
 
 .main-panel::-webkit-scrollbar {
@@ -458,6 +459,7 @@ body {
   flex-direction: column;
   gap: 12px;
   width: 100%;
+  min-height: 0; /* Critical for flex containers */
 }
 
 .editor-header {
@@ -516,9 +518,11 @@ body {
 
 .editor-textarea {
   resize: vertical;
-  min-height: 200px;
+  min-height: 150px;
+  max-height: 400px;
   font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
   line-height: 1.5;
+  flex: 1;
 }
 
 /* BUTTONS */
