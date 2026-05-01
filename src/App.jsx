@@ -292,11 +292,25 @@ export default function App() {
         {/* LEFT SIDEBAR */}
         <div className="sidebar">
           <div className="sidebar-header">
-            <h1>Prompts</h1>
-            <button onClick={handleLogout} className="logout-btn" title="Logout">
-              ⏻
-            </button>
-          </div>
+  <h1>Prompts</h1>
+  <div className="sidebar-header-actions">
+    <button 
+      onClick={() => {
+        setSelectedPrompt(null);
+        setSwipeOpen(null);
+        setNewPrompt({ title: '', content: '', tags: '' });
+        setEditingId(null);
+      }}
+      className="new-btn"
+      title="New prompt"
+    >
+      ⊕
+    </button>
+    <button onClick={handleLogout} className="logout-btn" title="Logout">
+      ⏻
+    </button>
+  </div>
+</div>
 
           <input
             type="text"
