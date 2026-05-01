@@ -1,38 +1,28 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 
 export default function App() {
+  // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
+  // App state
   const [prompts, setPrompts] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
+  const [selectedPromptId, setSelectedPromptId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [newPrompt, setNewPrompt] = useState({ title: '', content: '', tags: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [selectedPrompt, setSelectedPrompt] = useState(null);
-  const [swipeOpen, setSwipeOpen] = useState(null);
-  const swipeRef = useRef({});
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
   const SESSION_KEY = 'promptManagerAuth';
   const SESSION_EXPIRY_DAYS = 2;
 
-  // Detect mobile
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Check if user is already authenticated
+  // Check auth on mount
   useEffect(() => {
     const storedAuth = localStorage.getItem(SESSION_KEY);
     if (storedAuth) {
@@ -50,6 +40,7 @@ export default function App() {
     }
   }, []);
 
+  // AUTHENTICATION
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginLoading(true);
@@ -69,7 +60,6 @@ export default function App() {
           password,
           timestamp: Date.now()
         }));
-
         setIsAuthenticated(true);
         fetchPrompts(password);
       } else {
@@ -88,11 +78,10 @@ export default function App() {
     setIsAuthenticated(false);
     setPassword('');
     setPrompts([]);
-    setNewPrompt({ title: '', content: '', tags: '' });
-    setSelectedPrompt(null);
-    setEditingId(null);
+    resetForm();
   };
 
+  // PROMPTS API
   const fetchPrompts = async (pwd = password) => {
     try {
       setLoading(true);
@@ -115,12 +104,6 @@ export default function App() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchPrompts();
-    }
-  }, []);
 
   const savePrompt = async () => {
     if (!newPrompt.title.trim() || !newPrompt.content.trim()) {
@@ -167,10 +150,8 @@ export default function App() {
 
       if (response.ok) {
         setPrompts(updatedPrompts);
-        setNewPrompt({ title: '', content: '', tags: '' });
-        setEditingId(null);
+        resetForm();
         setError('');
-        setSelectedPrompt(null);
       }
     } catch (err) {
       setError('Failed to save prompt');
@@ -195,15 +176,9 @@ export default function App() {
         body: JSON.stringify({ prompts: updatedPrompts })
       });
 
-      if (response.status === 401) {
-        handleLogout();
-        return;
-      }
-
       if (response.ok) {
         setPrompts(updatedPrompts);
-        setSelectedPrompt(null);
-        setSwipeOpen(null);
+        resetForm();
       }
     } catch (err) {
       setError('Failed to delete prompt');
@@ -214,59 +189,50 @@ export default function App() {
 
   const copyToClipboard = (content) => {
     navigator.clipboard.writeText(content);
-    alert('Copied to clipboard!');
+    alert('Copied!');
+  };
+
+  const resetForm = () => {
+    setNewPrompt({ title: '', content: '', tags: '' });
+    setEditingId(null);
+    setSelectedPromptId(null);
   };
 
   const startEdit = (prompt) => {
+    setSelectedPromptId(prompt.id);
     setEditingId(prompt.id);
     setNewPrompt({
       title: prompt.title,
       content: prompt.content,
       tags: prompt.tags.join(', ')
     });
-    setSelectedPrompt(prompt.id);
-    setSwipeOpen(null);
   };
 
   const cancelEdit = () => {
-    setEditingId(null);
-    setNewPrompt({ title: '', content: '', tags: '' });
+    resetForm();
   };
 
-  const handleSwipeStart = (id, e) => {
-    swipeRef.current[id] = { startX: e.touches[0].clientX, startTime: Date.now() };
-  };
+  // FILTERING
+  const allTags = [...new Set(prompts.flatMap(p => p.tags))];
+  const filtered = prompts.filter(p => {
+    const matchesSearch =
+      p.title.toLowerCase().includes(search.toLowerCase()) ||
+      p.content.toLowerCase().includes(search.toLowerCase());
+    const matchesTag = !selectedTag || p.tags.includes(selectedTag);
+    return matchesSearch && matchesTag;
+  });
 
-  const handleSwipeEnd = (id, e) => {
-    if (!swipeRef.current[id]) return;
+  const selectedPrompt = prompts.find(p => p.id === selectedPromptId);
 
-    const endX = e.changedTouches[0].clientX;
-    const startX = swipeRef.current[id].startX;
-    const diff = startX - endX;
-    const timeDiff = Date.now() - swipeRef.current[id].startTime;
-
-    // Only register swipe if it's fast (less than 500ms) and far (more than 50px)
-    if (timeDiff < 500 && Math.abs(diff) > 50) {
-      if (diff > 0) {
-        // Swiped left - open
-        setSwipeOpen(id);
-        setSelectedPrompt(id);
-      } else {
-        // Swiped right - close
-        setSwipeOpen(null);
-      }
-    }
-
-    swipeRef.current[id] = null;
-  };
-
-  // LOGIN SCREEN
+  // ============================================
+  // RENDER LOGIN
+  // ============================================
   if (!isAuthenticated) {
     return (
       <div className="login-container">
         <div className="login-box">
           <h1>🤖 Prompt Manager</h1>
-          <p>Enter your password to continue</p>
+          <p>Enter your password</p>
 
           <form onSubmit={handleLogin}>
             <input
@@ -281,312 +247,207 @@ export default function App() {
             {loginError && <div className="login-error">{loginError}</div>}
 
             <button type="submit" disabled={loginLoading} className="login-btn">
-              {loginLoading ? 'Logging in...' : 'Login'}
+              {loginLoading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
-
-          <p className="session-info">Session expires in 2 days</p>
         </div>
       </div>
     );
   }
 
-  // MAIN APP
-  const allTags = [...new Set(prompts.flatMap(p => p.tags))];
-  const filtered = prompts.filter(p => {
-    const matchesSearch =
-      p.title.toLowerCase().includes(search.toLowerCase()) ||
-      p.content.toLowerCase().includes(search.toLowerCase());
-    const matchesTag = !selectedTag || p.tags.includes(selectedTag);
-    return matchesSearch && matchesTag;
-  });
-
+  // ============================================
+  // RENDER MAIN APP
+  // ============================================
   return (
-    <div className="app">
-      <div className="container">
-        {/* LEFT SIDEBAR */}
-        <div className="sidebar">
-          <div className="sidebar-header">
-            <h1>Prompts</h1>
-            <div className="sidebar-header-actions">
-              <button 
-                onClick={() => {
-                  setSelectedPrompt(null);
-                  setSwipeOpen(null);
-                  setNewPrompt({ title: '', content: '', tags: '' });
-                  setEditingId(null);
-                }}
-                className="new-btn"
-                title="New prompt"
-              >
-                ⊕
-              </button>
-              <button onClick={handleLogout} className="logout-btn" title="Logout">
-                ⏻
-              </button>
-            </div>
-          </div>
-
-          <input
-            type="text"
-            placeholder="Search..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="search-input"
-          />
-
-          {allTags.length > 0 && (
-            <div className="tags-filter">
-              <button
-                className={!selectedTag ? 'tag-btn active' : 'tag-btn'}
-                onClick={() => setSelectedTag('')}
-              >
-                All
-              </button>
-              {allTags.map(tag => (
-                <button
-                  key={tag}
-                  className={selectedTag === tag ? 'tag-btn active' : 'tag-btn'}
-                  onClick={() => setSelectedTag(tag)}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="prompts-list">
-            {loading && <p className="loading">Loading...</p>}
-            {!loading && filtered.length === 0 && <p className="empty">No prompts</p>}
-            {filtered.map(prompt => (
-              <div
-                key={prompt.id}
-                className={`prompt-item ${selectedPrompt === prompt.id ? 'active' : ''} ${swipeOpen === prompt.id ? 'swiped' : ''}`}
-                onTouchStart={(e) => handleSwipeStart(prompt.id, e)}
-                onTouchEnd={(e) => handleSwipeEnd(prompt.id, e)}
-                onClick={() => {
-                  if (!isMobile) {
-                    setSelectedPrompt(prompt.id);
-                    setSwipeOpen(null);
-                  }
-                }}
-              >
-                <div className="prompt-item-content">
-                  <div className="prompt-item-title">{prompt.title}</div>
-                  <div className="prompt-item-preview">{prompt.content.substring(0, 50)}...</div>
-                  {prompt.tags.length > 0 && (
-                    <div className="prompt-item-tags">
-                      {prompt.tags.map(tag => (
-                        <span key={tag} className="small-tag">{tag}</span>
-                      ))}
-                    </div>
-                  )}
-                  {isMobile && swipeOpen !== prompt.id && (
-                    <div className="swipe-hint">← Swipe left to view</div>
-                  )}
-                </div>
-                {swipeOpen === prompt.id && (
-                  <div className="prompt-item-swipe">
-                    <button onClick={(e) => { e.stopPropagation(); startEdit(prompt); }} className="swipe-btn edit-btn">View</button>
-                  </div>
-                )}
-              </div>
-            ))}
+    <div className="app-container">
+      {/* SIDEBAR (Desktop) / TOP (Mobile) */}
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <h1>Prompts</h1>
+          <div className="sidebar-actions">
+            <button
+              onClick={() => resetForm()}
+              className="icon-btn new-btn"
+              title="New prompt"
+            >
+              ⊕
+            </button>
+            <button
+              onClick={handleLogout}
+              className="icon-btn logout-btn"
+              title="Logout"
+            >
+              ⏻
+            </button>
           </div>
         </div>
 
-        {/* RIGHT PANEL - DESKTOP ONLY */}
-        {!isMobile && (
-          <div className="main-panel">
-            {error && <div className="error-banner">{error}</div>}
+        <input
+          type="text"
+          placeholder="Search..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="search-box"
+        />
 
-            {selectedPrompt || editingId ? (
-              <div className="editor">
-                <div className="editor-header">
-                  <h2>{editingId ? 'Edit Prompt' : 'View Prompt'}</h2>
-                  {selectedPrompt && !editingId && (
-                    <button onClick={() => startEdit(prompts.find(p => p.id === selectedPrompt))} className="btn-edit-header">
-                      Edit
-                    </button>
-                  )}
-                </div>
-
-                <input
-                  type="text"
-                  placeholder="Title"
-                  value={newPrompt.title}
-                  onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
-                  className="editor-input title-input"
-                />
-
-                <textarea
-                  placeholder="Content"
-                  value={newPrompt.content}
-                  onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
-                  className="editor-textarea"
-                  rows="10"
-                />
-
-                <input
-                  type="text"
-                  placeholder="Tags (comma-separated)"
-                  value={newPrompt.tags}
-                  onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
-                  className="editor-input tags-input"
-                />
-
-                {editingId && (
-                  <div className="editor-actions">
-                    <button onClick={savePrompt} disabled={loading} className="btn-save">
-                      {loading ? 'Saving...' : 'Save'}
-                    </button>
-                    <button onClick={cancelEdit} className="btn-cancel">
-                      Cancel
-                    </button>
-                  </div>
-                )}
-
-                {selectedPrompt && !editingId && (
-                  <div className="viewer-actions">
-                    <button onClick={() => copyToClipboard(prompts.find(p => p.id === selectedPrompt).content)} className="btn-copy">
-                      Copy
-                    </button>
-                    <button onClick={() => deletePrompt(selectedPrompt)} className="btn-delete">
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="new-prompt-form">
-                <h2>Create New Prompt</h2>
-                <input
-                  type="text"
-                  placeholder="Title"
-                  value={newPrompt.title}
-                  onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
-                  className="editor-input title-input"
-                />
-
-                <textarea
-                  placeholder="Content"
-                  value={newPrompt.content}
-                  onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
-                  className="editor-textarea"
-                  rows="10"
-                />
-
-                <input
-                  type="text"
-                  placeholder="Tags (comma-separated)"
-                  value={newPrompt.tags}
-                  onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
-                  className="editor-input tags-input"
-                />
-
-                <button onClick={savePrompt} disabled={loading} className="btn-save">
-                  {loading ? 'Saving...' : 'Create Prompt'}
-                </button>
-              </div>
-            )}
+        {allTags.length > 0 && (
+          <div className="tag-buttons">
+            <button
+              className={!selectedTag ? 'tag-btn active' : 'tag-btn'}
+              onClick={() => setSelectedTag('')}
+            >
+              All
+            </button>
+            {allTags.map(tag => (
+              <button
+                key={tag}
+                className={selectedTag === tag ? 'tag-btn active' : 'tag-btn'}
+                onClick={() => setSelectedTag(tag)}
+              >
+                {tag}
+              </button>
+            ))}
           </div>
         )}
 
-        {/* MOBILE BOTTOM PANEL */}
-        {isMobile && (selectedPrompt || editingId) && (
-          <div className="mobile-panel">
-            {error && <div className="error-banner">{error}</div>}
-
-            <div className="editor">
-              <div className="editor-header">
-                <h2>{editingId ? 'Edit' : 'View'}</h2>
-                <button 
-                  onClick={() => {
-                    setSelectedPrompt(null);
-                    setSwipeOpen(null);
-                    setEditingId(null);
-                    setNewPrompt({ title: '', content: '', tags: '' });
-                  }}
-                  className="close-btn"
-                >
-                  ✕
-                </button>
+        <div className="prompts-list">
+          {loading && <p className="status-text">Loading...</p>}
+          {!loading && filtered.length === 0 && (
+            <p className="status-text">No prompts found</p>
+          )}
+          {filtered.map(prompt => (
+            <div
+              key={prompt.id}
+              className={`prompt-item ${selectedPromptId === prompt.id ? 'active' : ''}`}
+              onClick={() => startEdit(prompt)}
+            >
+              <div className="prompt-item-title">{prompt.title}</div>
+              <div className="prompt-item-preview">
+                {prompt.content.substring(0, 40)}...
               </div>
-
-              <input
-                type="text"
-                placeholder="Title"
-                value={newPrompt.title}
-                onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
-                className="editor-input title-input"
-              />
-
-              <textarea
-                placeholder="Content"
-                value={newPrompt.content}
-                onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
-                className="editor-textarea"
-              />
-
-              <input
-                type="text"
-                placeholder="Tags"
-                value={newPrompt.tags}
-                onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
-                className="editor-input tags-input"
-              />
-
-              {editingId && (
-                <div className="editor-actions">
-                  <button onClick={savePrompt} disabled={loading} className="btn-save">
-                    Save
-                  </button>
-                  <button onClick={cancelEdit} className="btn-cancel">
-                    Cancel
-                  </button>
-                </div>
-              )}
-
-              {selectedPrompt && !editingId && (
-                <div className="viewer-actions">
-                  <button onClick={() => {
-                    setEditingId(selectedPrompt);
-                    setNewPrompt({
-                      title: prompts.find(p => p.id === selectedPrompt)?.title || '',
-                      content: prompts.find(p => p.id === selectedPrompt)?.content || '',
-                      tags: prompts.find(p => p.id === selectedPrompt)?.tags.join(', ') || ''
-                    });
-                  }} className="btn-copy">
-                    Edit
-                  </button>
-                  <button onClick={() => copyToClipboard(prompts.find(p => p.id === selectedPrompt).content)} className="btn-copy">
-                    Copy
-                  </button>
-                  <button onClick={() => deletePrompt(selectedPrompt)} className="btn-delete">
-                    Delete
-                  </button>
+              {prompt.tags.length > 0 && (
+                <div className="prompt-tags">
+                  {prompt.tags.slice(0, 2).map(tag => (
+                    <span key={tag} className="tag-badge">{tag}</span>
+                  ))}
                 </div>
               )}
             </div>
+          ))}
+        </div>
+      </div>
+
+      {/* MAIN CONTENT */}
+      <div className="main-content">
+        {error && <div className="error-box">{error}</div>}
+
+        {selectedPromptId && selectedPrompt ? (
+          // VIEW/EDIT MODE
+          <div className="form-container">
+            <h2>{editingId ? 'Edit Prompt' : 'View Prompt'}</h2>
+
+            <input
+              type="text"
+              placeholder="Title"
+              value={newPrompt.title}
+              onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
+              className="form-input"
+              disabled={!editingId}
+            />
+
+            <textarea
+              placeholder="Content"
+              value={newPrompt.content}
+              onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
+              className="form-textarea"
+              disabled={!editingId}
+            />
+
+            <input
+              type="text"
+              placeholder="Tags (comma-separated)"
+              value={newPrompt.tags}
+              onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
+              className="form-input"
+              disabled={!editingId}
+            />
+
+            <div className="button-group">
+              {editingId ? (
+                <>
+                  <button
+                    onClick={savePrompt}
+                    disabled={loading}
+                    className="btn btn-primary"
+                  >
+                    {loading ? 'Saving...' : 'Save'}
+                  </button>
+                  <button onClick={cancelEdit} className="btn btn-secondary">
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setEditingId(selectedPromptId)}
+                    className="btn btn-primary"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => copyToClipboard(selectedPrompt.content)}
+                    className="btn btn-secondary"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => deletePrompt(selectedPromptId)}
+                    className="btn btn-danger"
+                  >
+                    Delete
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          // CREATE MODE
+          <div className="form-container">
+            <h2>Create New Prompt</h2>
+
+            <input
+              type="text"
+              placeholder="Title"
+              value={newPrompt.title}
+              onChange={e => setNewPrompt({ ...newPrompt, title: e.target.value })}
+              className="form-input"
+            />
+
+            <textarea
+              placeholder="Content"
+              value={newPrompt.content}
+              onChange={e => setNewPrompt({ ...newPrompt, content: e.target.value })}
+              className="form-textarea"
+            />
+
+            <input
+              type="text"
+              placeholder="Tags (comma-separated)"
+              value={newPrompt.tags}
+              onChange={e => setNewPrompt({ ...newPrompt, tags: e.target.value })}
+              className="form-input"
+            />
+
+            <button
+              onClick={savePrompt}
+              disabled={loading}
+              className="btn btn-primary"
+            >
+              {loading ? 'Creating...' : 'Create Prompt'}
+            </button>
           </div>
         )}
       </div>
-
-      {/* FLOATING BUTTON - MOBILE ONLY */}
-      {isMobile && (
-        <button
-          className="floating-btn"
-          onClick={() => {
-            setSelectedPrompt(null);
-            setSwipeOpen(null);
-            setNewPrompt({ title: '', content: '', tags: '' });
-            setEditingId(null);
-          }}
-          title="New prompt"
-        >
-          +
-        </button>
-      )}
     </div>
   );
 }
